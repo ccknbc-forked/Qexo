@@ -1,15 +1,15 @@
 from hexoweb.views import *
 from django.urls import path, re_path
 # from django.contrib import admin
-from django.views.static import serve
-from django.conf import settings
+# from django.views.static import serve
+# from django.conf import settings
 import hexoweb.pub as pub
 from django.views.generic import TemplateView
 
 urlpatterns = [
     # path('admin/', admin.site.urls),
-    re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT},
-            name='static'),
+    # re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT},
+    #         name='static'),
 
     path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
 
@@ -17,24 +17,26 @@ urlpatterns = [
     path("logout/", logout_view, name="logout"),
     path("init/", init_view, name="init"),
     path("update/", update_view, name="update"),
+    path('migrate/', migrate_view, name="migrate"),
     path('', index, name='home'),
 
     path('api/auth/', auth, name='auth'),
     path('api/save/', save, name='save'),
     path('api/save_post/', save_post, name='save_post'),
+    path('api/save_page/', save_page, name='save_page'),
     path('api/save_draft/', save_draft, name='save_draft'),
-    path('api/new/', new, name='new'),
     path('api/delete/', delete, name='delete'),
-    path('api/delete_post/', delete_post, name='delete_post'),
     path('api/upload/', upload_img, name='upload'),
     path('api/delete_img/', delete_img, name='delete_img'),
-    path('api/set_github/', set_github, name='set_github'),
+    path('api/set_hexo/', set_hexo, name='set_hexo'),
     path('api/set_user/', set_user, name='set_user'),
-    path('api/set_image_bed/', set_image_bed, name='set_image_bed'),
+    path('api/set_image_host/', set_image_host, name='set_image_host'),
     path('api/set_api/', set_api, name='set_api'),
     path('api/set_abbrlink/', set_abbrlink, name='set_abbrlink'),
     path('api/set_cust/', set_cust, name='set_cust'),
     path('api/set_statistic/', set_statistic, name='set_statistic'),
+    path('api/set_security/', set_security, name='set_security'),
+    path('api/set_excerpt/', set_excerpt, name='set_excerpt'),
     path('api/set_value/', set_value, name='set_value'),
     path('api/del_value/', del_value, name='del_value'),
     path('api/new_value/', new_value, name='new_value'),
@@ -55,13 +57,13 @@ urlpatterns = [
     path('api/clear_notifications/', clear_notification, name='clear_notifications'),
     path('api/set_onepush/', set_onepush, name='set_onepush'),
     path('api/test_onepush/', test_onepush, name='test_onepush'),
+    path('api/set_sidebar/', set_sidebar, name='set_sidebar'),
+    path('api/set_cdn/', set_cdn, name='set_cdn'),
 
     path('pub/save/', pub.save, name='pub_save'),
     path('pub/save_post/', pub.save_post, name='pub_save_post'),
     path('pub/save_draft/', pub.save_draft, name='pub_save_draft'),
-    path('pub/new/', pub.new, name='pub_new'),
     path('pub/delete/', pub.delete, name='pub_delete'),
-    path('pub/delete_post/', pub.delete_post, name='pub_delete_post'),
     path('pub/create_webhook/', pub.create_webhook_config, name='pub_create_webhook'),
     path('pub/get_posts/', pub.get_posts, name='pub_get_posts'),
     path('pub/get_pages/', pub.get_pages, name='pub_get_pages'),
@@ -77,6 +79,11 @@ urlpatterns = [
     path('pub/get_notifications/', pub.get_notifications, name='pub_get_notifications'),
     path('pub/status/', pub.status, name='pub_status'),
     path('pub/statistic/', pub.statistic, name='pub_statistic'),
+    path('pub/waline/', pub.waline, name='pub_waline'),
+    path('pub/set_custom/', pub.set_custom, name='pub_set_custom'),
+    path('pub/del_custom/', pub.del_custom, name='pub_del_custom'),
+    path('pub/new_custom/', pub.new_custom, name='pub_new_custom'),
+    path('pub/notifications', pub.notifications, name='pub_notifications'),
 
     re_path(r'^(?!api)^(?!pub).*$\.*', pages, name='pages'),
 ]

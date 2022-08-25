@@ -1,23 +1,13 @@
 import json
 import random
 
-QEXO_VERSION = "1.7.0"
+QEXO_VERSION = "2.0.0"
 
 ALL_SETTINGS = [  # [名称, 默认值, 是否在尝试修复时重置, 简介]
     ["ABBRLINK_ALG", "crc16", False, "短链接算法"],
     ["ABBRLINK_REP", "dec", False, "短链接格式dec/hex"],
     ["CDN_PREV", "https://unpkg.com/", True, "调用NPM的CDN前缀"],
-    ["GH_REPO", "", False, "Github用户名"],
-    ["GH_REPO_BRANCH", "", False, "仓库分支"],
-    ["GH_REPO_PATH", "", False, "仓库路径"],
-    ["GH_TOKEN", "", False, "Github密钥"],
-    ["IMG_API", "", False, "图床API地址"],
-    ["IMG_CUSTOM_BODY", "", False, "图床自定义请求主体"],
-    ["IMG_CUSTOM_HEADER", "", False, "图床自定义请求头"],
-    ["IMG_CUSTOM_URL", "", False, "图床自定义链接前缀"],
-    ["IMG_JSON_PATH", "", False, "图床JSON路径"],
-    ["IMG_POST", "", False, "图床图片请求名"],
-    ["IMG_TYPE", "", False, "图床类别"],
+    ["CDNJS", "https://cdn.staticfile.org/", True, "调用CDNJS的CDN前缀"],
     ["INIT", "2", False, "初始化标识"],
     ["QEXO_ICON",
      "https://unpkg.com/qexo-static@1.4.0/assets/img/brand/favicon.ico",
@@ -27,12 +17,6 @@ ALL_SETTINGS = [  # [名称, 默认值, 是否在尝试修复时重置, 简介]
      False, "站点LOGO"],
     ["QEXO_NAME", "Hexo管理面板", False, "站点名"],
     ["QEXO_SPLIT", "-", False, "站点分隔符"],
-    ["S3_ACCESS_KEY", "", False, "S3权限密钥"],
-    ["S3_BUCKET", "", False, "S3桶"],
-    ["S3_ENDPOINT", "", False, "S3边缘节点"],
-    ["S3_KEY_ID", "", False, "S3密钥ID"],
-    ["S3_PATH", "", False, "S3上传路径"],
-    ["S3_PREV_URL", "", False, "S3链接前缀"],
     ["VDITOR_EMOJI",
      json.dumps({"微笑": "🙂", "撇嘴": "😦", "色": "😍", "发呆": "😍", "得意": "😎",
                  "流泪": "😭", "害羞": "😊", "闭嘴": "😷", "睡": "😴",
@@ -59,13 +43,30 @@ ALL_SETTINGS = [  # [名称, 默认值, 是否在尝试修复时重置, 简介]
     ["PROJECT_ID", "", False, "Qexo项目ID"],
     ["ALLOW_FRIEND", "否", False, "是否允许友链申请 是/否"],
     ["LAST_LOGIN", "", True, "博主最后上线时间(无需更改)"],
-    ["FTP_HOST", "", False, "FTP服务器"],
-    ["FTP_PORT", "", False, "FTP端口"],
-    ["FTP_USER", "", False, "FTP用户名"],
-    ["FTP_PASS", "", False, "FTP密码"],
-    ["FTP_PATH", "", False, "FTP文件上传地址"],
-    ["FTP_PREV_URL", "", False, "FTP图床链接"],
+    ["IMG_HOST", "{\"type\":\"关闭\",\"params\":{}}", False, "2.0之后的图床设置JSON"],
     ["ONEPUSH", "", False, "OnePush消息通知"],
+    ["PROVIDER", "", False, "2.0之后的平台JSON"],
     ["STATISTIC_ALLOW", "否", False, "是否开启统计功能 是/否"],
     ["STATISTIC_DOMAINS", "", False, "统计安全域名 英文半角逗号间隔"],
+    ["FRIEND_RECAPTCHA", "否", False, "启用友链验证码reCaptcha 关闭/v2/v3"],
+    ["RECAPTCHA_TOKEN", "", False, "用于友链reCaptcha服务器端密钥"],
+    ["LOGIN_RECAPTCHA_SITE_TOKEN", "", False, "用于登录验证的reCaptchaV3网站密钥"],
+    ["LOGIN_RECAPTCHA_SERVER_TOKEN", "", False, "用于登录验证的reCaptchaV3服务端密钥"],
+    ["POST_SIDEBAR",
+     "[{\"search\":\"title\",\"name\":\"标题\",\"icon\":\"fas fa-heading\"},{\"search\":\"abbrlink\",\"name\":\"缩写\",\"icon\":\"fas fa-id-card\"},{\"search\":\"date\",\"name\":\"发布于\",\"icon\":\"fas fa-globe-americas\"},{\"search\":\"updated\",\"name\":\"更新于\",\"icon\":\"fas fa-calendar-alt\"},{\"search\":\"tags\",\"name\":\"标签\",\"icon\":\"fas fa-tags\"},{\"search\":\"categories\",\"name\":\"分类\",\"icon\":\"fas fa-folder-open\"}]",
+     False, "文章侧边栏配置JSON"],
+    ["PAGE_SIDEBAR",
+     "[{\"search\":\"title\",\"name\":\"标题\",\"icon\":\"fas fa-heading\"},{\"search\":\"date\",\"name\":\"发布于\",\"icon\":\"fas fa-globe-americas\"},{\"search\":\"updated\",\"name\":\"更新于\",\"icon\":\"fas fa-calendar-alt\"}]",
+     False, "页面侧边栏配置JSON"],
+    ["EXCERPT_POST", "否", False, "是否开启在摘录为空时自动截取文章 是/否"],
+    ["EXCERPT_LENGTH", "200", False, "自动截取文章的长度"]
+]
+
+ALL_CDN = [
+    {"name": "Cloudflare", "url": "https://cdnjs.cloudflare.com/ajax/libs/"},
+    {"name": "Loli", "url": "https://cdnjs.loli.net/ajax/libs/"},
+    {"name": "七牛云", "url": "https://cdn.staticfile.org/"},
+    {"name": "75CDN", "url": "https://lib.baomitu.com/"},
+    # {"name": "重庆邮电大学", "url": "https://mirrors.cqupt.edu.cn/cdnjs/ajax/libs/"},
+    {"name": "南方科技大学", "url": "https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/"}
 ]

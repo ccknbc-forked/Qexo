@@ -9,64 +9,85 @@ from math import ceil
 
 
 def page_404(request, exception):
-    return render(request, 'home/page-404.html', {"cdn_prev": "https://unpkg.com/"})
+    return render(request, 'home/page-404.html', {"cdn_prev": "https://unpkg.com/", "cdnjs": "https://cdn.staticfile.org/"})
 
 
 def page_403(request, exception):
-    return render(request, 'home/page-403.html', {"cdn_prev": "https://unpkg.com/"})
+    return render(request, 'home/page-403.html', {"cdn_prev": "https://unpkg.com/", "cdnjs": "https://cdn.staticfile.org/"})
 
 
 def page_500(request):
     return render(request, 'home/page-500.html',
-                  {"error": "程序遇到了错误！", "cdn_prev": "https://unpkg.com/"})
+                  {"error": "程序遇到了错误！", "cdn_prev": "https://unpkg.com/", "cdnjs": "https://cdn.staticfile.org/"})
 
 
 def login_view(request):
     try:
-        if int(SettingModel.objects.get(name="INIT").content) <= 5:
+        if int(get_setting("INIT")) <= 5:
+            print("未完成初始化配置, 转跳到初始化页面")
             return redirect("/init/")
     except:
+        print("未检测到初始化配置, 转跳到初始化页面")
         return redirect("/init/")
     if request.user.is_authenticated:
         if not request.GET.get("next"):
             return redirect("/")
         else:
-            return redirect(request.GET.get("next"))
-    return render(request, "accounts/login.html", get_custom_config())
+            return redirect(unquote(request.GET.get("next")))
+    context = get_custom_config()
+    site_token = get_setting("LOGIN_RECAPTCHA_SITE_TOKEN")
+    server_token = get_setting("LOGIN_RECAPTCHA_SERVER_TOKEN")
+    if site_token and server_token:
+        context["site_token"] = site_token
+    return render(request, "accounts/login.html", context)
 
 
 @login_required(login_url="/login/")
 def update_view(request):
     try:
-        if int(SettingModel.objects.get(name="INIT").content) <= 5:
+        if int(get_setting("INIT")) <= 5:
+            print("未完成初始化配置, 转跳到初始化页面")
             return redirect("/init/")
     except:
+        print("未检测到初始化配置, 转跳到初始化页面")
         return redirect("/init/")
     if request.method == 'POST':
         for setting in request.POST.keys():
             save_setting(setting, request.POST.get(setting))
-    friends = FriendModel.objects.all()  # 历史遗留问题
-    for friend in friends:
-        if friend.status is None:
-            friend.status = True
-            friend.save()
+            if setting == "PROVIDER":
+                update_provider()
+        delete_all_caches()
     already = list()
     settings = SettingModel.objects.all()
     for query in settings:
         if query.name not in already:
             already.append(query.name)
-        else:
-            query.delete()
     context = get_custom_config()
     context["settings"] = list()
     context["counter"] = 0
     for setting in ALL_SETTINGS:
         if setting[0] not in already:
-            context["settings"].append(dict(name=setting[0], value=setting[1],
-                                            placeholder=setting[3]))
+            if setting[0] == "PROVIDER":  # migrate from 1.x
+                _provider = {"provider": "github",
+                             "params": {"token": get_setting("GH_TOKEN"),
+                                        "branch": get_setting("GH_REPO_BRANCH"),
+                                        "repo": get_setting("GH_REPO"),
+                                        "path": get_setting("GH_PATH")}}
+                context["settings"].append(dict(name=setting[0], value=json.dumps(_provider),
+                                                placeholder=setting[3]))
+                if verify_provider(_provider)["status"] == 1:
+                    save_setting("PROVIDER", _provider)
+                else:
+                    context["msg"] = "自动生成PROVIDER错误，请检查配置并提交"
+
+            else:
+                if setting[2]:
+                    save_setting(setting[0], setting[1])
+                context["settings"].append(dict(name=setting[0], value=setting[1], placeholder=setting[3]))
+
             context["counter"] += 1
     if not context["counter"]:
-        save_setting("UPDATE_FROM", QEXO_VERSION)
+        save_setting("UPDATE_FROM", "false")
         return redirect("/")
     return render(request, "accounts/update.html", context)
 
@@ -75,9 +96,8 @@ def init_view(request):
     msg = None
     context = dict()
     context.update(get_custom_config())
-    try:
-        step = SettingModel.objects.get(name="INIT").content
-    except:
+    step = get_setting("INIT")
+    if not step:
         save_setting("INIT", "1")
         step = "1"
     if request.method == "POST":
@@ -121,65 +141,89 @@ def init_view(request):
                     save_setting("INIT", "3")
                     step = "3"
             except Exception as e:
+                print("初始化用户名密码错误:" + repr(e))
                 msg = repr(e)
                 context["username"] = username
                 context["password"] = password
                 context["repassword"] = repassword
         if request.POST.get("step") == "3":
+            provider = False
             try:
-                repo = request.POST.get("repo")
-                branch = request.POST.get("branch")
-                token = request.POST.get("token")
-                path = request.POST.get("path")
-                try:
-                    _repo = github.Github(token).get_repo(repo).get_contents(path + "source/_posts",
-                                                                             ref=branch)
-                    save_setting("GH_REPO_PATH", path)
-                    save_setting("GH_REPO_BRANCH", branch)
-                    save_setting("GH_REPO", repo)
-                    save_setting("GH_TOKEN", token)
-                    save_setting("INIT", "4")
-                    step = "4"
-                except:
-                    msg = "校验失败"
-                    context["repo"] = repo
-                    context["branch"] = branch
-                    context["token"] = token
-                    context["path"] = path
-            except Exception as e:
-                msg = repr(e)
-                context["repo"] = repo
-                context["branch"] = branch
-                context["token"] = token
-                context["path"] = path
-        if request.POST.get("step") == "4":
-            api = request.POST.get("api")
-            post_params = request.POST.get("post")
-            json_path = request.POST.get("jsonpath")
-            custom_body = request.POST.get("body")
-            custom_header = request.POST.get("header")
-            custom_url = request.POST.get("custom")
-            try:
-                save_setting("IMG_API", api)
-                save_setting("IMG_POST", post_params)
-                save_setting("IMG_JSON_PATH", json_path)
-                save_setting("IMG_CUSTOM_BODY", custom_body)
-                save_setting("IMG_CUSTOM_HEADER", custom_header)
-                save_setting("IMG_CUSTOM_URL", custom_url)
-                if check_if_vercel():
-                    save_setting("INIT", "5")
-                    step = "5"
+                provider = {
+                    "provider": request.POST.get("provider"),
+                    "params": dict(request.POST)
+                }
+                del provider["params"]["provider"]
+                del provider["params"]["step"]
+                del provider["params"]["csrfmiddlewaretoken"]
+                for key in provider["params"].keys():
+                    provider["params"][key] = provider["params"][key][0]
+                if provider["params"].get("_force") is None:
+                    verify = verify_provider(provider)
+                    if verify["status"] and verify["status"] != -1:
+                        save_setting("PROVIDER", json.dumps(provider))
+                        update_provider()
+                        step = "5" if check_if_vercel() else "6"
+                        save_setting("INIT", step)
+                    else:
+                        msg = ""
+                        if verify["status"] == -1:
+                            msg = "远程连接错误!请检查Token"
+                        else:
+                            if verify["hexo"]:
+                                msg += "检测到Hexo版本: " + verify["hexo"]
+                            else:
+                                msg += "未检测到Hexo"
+                            if verify["indexhtml"]:
+                                msg += "\n检测到index.html, 这可能不是正确的仓库"
+                            if verify["config_hexo"]:
+                                msg += "\n检测到Hexo配置文件"
+                            else:
+                                msg += "\n未检测到Hexo配置"
+                            if verify["theme"]:
+                                msg += "\n检测到主题: " + verify["theme"]
+                            else:
+                                msg += "\n未检测到主题"
+                            if verify["config_theme"]:
+                                msg += "\n检测到主题配置" + verify["config_theme"]
+                            else:
+                                msg += "\n未检测到主题配置"
+                            if verify["theme_dir"]:
+                                msg += "\n检测到主题目录"
+                            else:
+                                msg += "\n未检测到主题目录"
+                            if verify["package"]:
+                                msg += "\n检测到package.json"
+                            else:
+                                msg += "\n未检测到package.json"
+                            if verify["source"]:
+                                msg += "\n检测到source目录 "
+                            else:
+                                msg += "\n未检测到source目录"
+                        msg = msg.replace("\n", "<br>")
+                        context["PROVIDER"] = json.dumps(provider)
+                        # Get Provider Settings
+                        all_provider = all_providers()
+                        context["all_providers"] = dict()
+                        for provider in all_provider:
+                            params = get_params(provider)
+                            context["all_providers"][provider] = params
                 else:
-                    save_setting("INIT", "6")
-                    step = "6"
+                    del provider["params"]["_force"]
+                    save_setting("PROVIDER", json.dumps(provider))
+                    update_provider()
+                    step = "5" if check_if_vercel() else "6"
+                    save_setting("INIT", step)
             except Exception as e:
                 msg = repr(e)
-                context["api"] = api
-                context["post"] = post_params
-                context["jsonpath"] = json_path
-                context["body"] = custom_body
-                context["header"] = custom_header
-                context["custom"] = custom_url
+                print("初始化Provider错误:" + repr(e))
+                context["PROVIDER"] = json.dumps(get_setting("PROVIDER") if not provider else provider)
+                # Get Provider Settings
+                all_provider = all_providers()
+                context["all_providers"] = dict()
+                for provider in all_provider:
+                    params = get_params(provider)
+                    context["all_providers"][provider] = params
         if request.POST.get("step") == "5":
             project_id = request.POST.get("id")
             vercel_token = request.POST.get("token")
@@ -190,6 +234,7 @@ def init_view(request):
                 save_setting("INIT", "6")
                 step = "6"
             except:
+                print("初始化Vercel配置错误:" + repr(e))
                 context["project_id"] = project_id
                 context["vercel_token"] = vercel_token
                 msg = "校验错误"
@@ -197,7 +242,17 @@ def init_view(request):
             user = User.objects.all()[0]
             context["username"] = user.username
     elif int(step) >= 6:
+        print("已完成初始化, 转跳至首页")
         return redirect("/")
+    else:
+        if int(step) == 3:
+            context["PROVIDER"] = get_setting("PROVIDER")
+            # Get Provider Settings
+            all_provider = all_providers()
+            context["all_providers"] = dict()
+            for provider in all_provider:
+                params = get_params(provider)
+                context["all_providers"][provider] = params
     context["msg"] = msg
     context["step"] = step
     return render(request, "accounts/init.html", context)
@@ -205,21 +260,81 @@ def init_view(request):
 
 def logout_view(request):
     logout(request)
+    print("注销成功")
     return redirect('/login/?next=/')
+
+
+@login_required(login_url='/login/')
+def migrate_view(request):
+    try:
+        if int(get_setting("INIT")) <= 5:
+            return redirect("/init/")
+    except:
+        print("未检测到初始化配置, 转跳到初始化页面")
+        return redirect("/init/")
+    context = {}
+    if request.method == "POST":
+        try:
+            if request.POST.get("type") == "export":
+                exports = dict()
+                exports["settings"] = export_settings()
+                exports["images"] = export_images()
+                exports["friends"] = export_friends()
+                exports["notifications"] = export_notifications()
+                exports["custom"] = export_customs()
+                exports["uv"] = export_uv()
+                exports["pv"] = export_pv()
+                html_template = loader.get_template('layouts/json.html')
+                response = HttpResponse(html_template.render({"data": json.dumps(exports)}, request))
+                response['Content-Type'] = 'application/octet-stream'
+                response['Content-Disposition'] = 'attachment;filename="qexo-export.json"'
+                return response
+            elif request.POST.get("type") == "import_settings":
+                import_settings(json.loads(request.POST.get("data")))
+                context["msg"] = "配置迁移完成！"
+            elif request.POST.get("type") == "import_images":
+                import_images(json.loads(request.POST.get("data")))
+                context["msg"] = "图片迁移完成！"
+            elif request.POST.get("type") == "import_friends":
+                import_friends(json.loads(request.POST.get("data")))
+                context["msg"] = "友链迁移完成！"
+            elif request.POST.get("type") == "import_notifications":
+                import_notifications(json.loads(request.POST.get("data")))
+                context["msg"] = "通知迁移完成！"
+            elif request.POST.get("type") == "import_custom":
+                import_custom(json.loads(request.POST.get("data")))
+                context["msg"] = "自定义字段迁移完成！"
+            elif request.POST.get("type") == "import_uv":
+                import_uv(json.loads(request.POST.get("data")))
+                context["msg"] = "UV统计迁移完成！"
+            elif request.POST.get("type") == "import_pv":
+                import_pv(json.loads(request.POST.get("data")))
+                context["msg"] = "PV统计迁移完成！"
+        except Exception as error:
+            print(request.POST.get("type") + "错误: " + repr(error))
+            context["msg"] = request.POST.get("type") + "错误: " + repr(error)
+        return render(request, "layouts/json.html", {"data": json.dumps(context)})
+    else:
+        context = get_custom_config()
+    return render(request, "accounts/migrate.html", context)
 
 
 # Pages
 @login_required(login_url="/login/")
 def index(request):
     try:
-        if int(SettingModel.objects.get(name="INIT").content) <= 5:
+        if int(get_setting("INIT")) <= 5:
+            print("初始化未完成, 转跳到初始化页面")
             return redirect("/init/")
     except:
+        print("未检测到初始化配置, 转跳到初始化页面")
         return redirect("/init/")
     try:
-        if SettingModel.objects.get(name="UPDATE_FROM").content != QEXO_VERSION:
+        if get_setting("UPDATE_FROM") != "false":
+            print("检测到更新配置, 转跳至配置更新页面")
             return redirect("/update/")
     except:
+        print("检测配置更新失败, 转跳至更新页面")
         return redirect("/update/")
     context = {'segment': 'index'}
     context.update(get_custom_config())
@@ -237,6 +352,8 @@ def index(request):
         context["posts"] = posts[0:5]
     else:
         context["posts"] = posts
+    for item in range(len(context["posts"])):
+        context["posts"][item]["fullname"] = quote(context["posts"][item]["fullname"])
     if len(images) >= 5:
         context["images"] = images[::-1][0:5]
     else:
@@ -254,17 +371,19 @@ def index(request):
 def pages(request):
     context = dict()
     try:
-        if int(SettingModel.objects.get(name="INIT").content) <= 5:
+        if int(get_setting("INIT")) <= 5:
+            print("初始化未完成, 转跳到初始化页面")
             return redirect("/init/")
     except:
-        pass
+        print("未检测到初始化配置, 转跳到初始化页面")
+        return redirect("/init/")
     try:
-        if SettingModel.objects.get(name="UPDATE_FROM").content != QEXO_VERSION:
+        if get_setting("UPDATE_FROM") != "false":
+            print("检测到更新配置, 转跳至配置更新页面")
             return redirect("/update/")
     except:
+        print("检测配置更新失败, 转跳至更新页面")
         return redirect("/update/")
-    # All resource paths end in .html.
-    # Pick out the html file name from the url. And load that template.
     try:
         context.update(get_custom_config())
         load_template = request.path.split('/')[-1]
@@ -272,99 +391,68 @@ def pages(request):
         if "index" in load_template:
             return index(request)
         elif "edit_page" in load_template:
-            repo = get_repo()
             file_path = request.GET.get("file")
-            context["file_content"] = repr(
-                repo.get_contents(SettingModel.objects.get(name="GH_REPO_PATH").content + file_path,
-                                  ref=SettingModel.objects.get(
-                                      name="GH_REPO_BRANCH").content).decoded_content.decode(
-                    "utf8")).replace("<",
-                                     "\\<").replace(
-                ">", "\\>").replace("!", "\\!")
+            context["front_matter"], context["file_content"] = get_post_details(
+                (Provider().get_content(file_path)))
+            context["front_matter"] = json.dumps(context["front_matter"])
             context['filename'] = file_path.split("/")[-2] + "/" + file_path.split("/")[-1]
             context["file_path"] = file_path
-            context["emoji"] = SettingModel.objects.get(name="VDITOR_EMOJI").content
+            context["emoji"] = get_setting("VDITOR_EMOJI")
+            context["sidebar"] = get_setting("PAGE_SIDEBAR")
             try:
-                if SettingModel.objects.get(
-                        name="IMG_TYPE").content:
+                if json.loads(get_setting("IMG_HOST"))["type"] != "关闭":
                     context["img_bed"] = True
-            except Exception as error:
-                context["error"] = repr(error)
+            except:
+                print("未检测到图床配置, 图床功能关闭")
         elif "edit_config" in load_template:
             file_path = request.GET.get("file")
-            repo = get_repo()
-            context["file_content"] = repr(repo.get_contents(
-                SettingModel.objects.get(name="GH_REPO_PATH").content + file_path,
-                ref=SettingModel.objects.get(
-                    name="GH_REPO_BRANCH").content).decoded_content.decode(
-                "utf8")).replace("<", "\\<").replace(">", "\\>").replace("!", "\\!")
+            context["file_content"] = repr(Provider().get_content(file_path)).replace("<", "\\<").replace(">", "\\>").replace("!", "\\!")
             context["filepath"] = file_path
             context['filename'] = file_path.split("/")[-1]
         elif "edit" in load_template:
             file_path = request.GET.get("file")
-            context["file_content"] = repr(get_post(file_path)).replace("<",
-                                                                        "\\<").replace(
-                ">", "\\>").replace("!", "\\!")
+            context["front_matter"], context["file_content"] = get_post_details(
+                (get_post(file_path)))
+            context["front_matter"] = json.dumps(context["front_matter"])
             context['filename'] = file_path.split("/")[-1]
             context['fullname'] = file_path
-            context["emoji"] = SettingModel.objects.get(name="VDITOR_EMOJI").content
+            context["emoji"] = get_setting("VDITOR_EMOJI")
+            context["sidebar"] = get_setting("POST_SIDEBAR")
             try:
-                if SettingModel.objects.get(
-                        name="IMG_TYPE").content:
+                if json.loads(get_setting("IMG_HOST"))["type"] != "关闭":
                     context["img_bed"] = True
-            except Exception as error:
-                context["error"] = repr(error)
+            except:
+                print("未检测到图床配置, 图床功能关闭")
         elif "new_page" in load_template:
-            repo = get_repo()
-            context["emoji"] = SettingModel.objects.get(name="VDITOR_EMOJI").content
+            context["emoji"] = get_setting("VDITOR_EMOJI")
+            context["sidebar"] = get_setting("PAGE_SIDEBAR")
             try:
-                now = time()
-                alg = SettingModel.objects.get(name="ABBRLINK_ALG").content
-                rep = SettingModel.objects.get(name="ABBRLINK_REP").content
-                abbrlink = get_crc_by_time(str(now), alg, rep)
-                context["file_content"] = repr(
-                    repo.get_contents(
-                        SettingModel.objects.get(name="GH_REPO_PATH").content + "scaffolds/page.md",
-                        ref=SettingModel.objects.get(
-                            name="GH_REPO_BRANCH").content).decoded_content.decode("utf8")).replace(
-                    "<", "\\<").replace(">", "\\>").replace("{{ date }}",
-                                                            strftime("%Y-%m-%d %H:%M:%S",
-                                                                     localtime(now))).replace(
-                    "{{ abbrlink }}", abbrlink).replace("!", "\\!")
+                context["front_matter"], context["file_content"] = get_post_details(
+                    (Provider().get_content("scaffolds/page.md")))
+                context["front_matter"] = json.dumps(context["front_matter"])
             except Exception as error:
+                print("获取页面模板失败, 错误信息: " + repr(error))
                 context["error"] = repr(error)
             try:
-                if SettingModel.objects.get(
-                        name="IMG_TYPE").content:
+                if json.loads(get_setting("IMG_HOST"))["type"] != "关闭":
                     context["img_bed"] = True
-            except Exception as error:
-                context["error"] = repr(error)
+            except:
+                print("未检测到图床配置, 图床功能关闭")
         elif "new" in load_template:
-            repo = get_repo()
-            context["emoji"] = SettingModel.objects.get(name="VDITOR_EMOJI").content
+            context["emoji"] = get_setting("VDITOR_EMOJI")
+            context["sidebar"] = get_setting("POST_SIDEBAR")
             try:
-                now = time()
-                alg = SettingModel.objects.get(name="ABBRLINK_ALG").content
-                rep = SettingModel.objects.get(name="ABBRLINK_REP").content
-                abbrlink = get_crc_by_time(str(now), alg, rep)
-                context["file_content"] = repr(
-                    repo.get_contents(
-                        SettingModel.objects.get(name="GH_REPO_PATH").content + "scaffolds/post.md",
-                        ref=SettingModel.objects.get(
-                            name="GH_REPO_BRANCH").content).decoded_content.decode("utf8").replace(
-                        "{{ date }}", strftime("%Y-%m-%d %H:%M:%S", localtime(
-                            now))).replace("{{ abbrlink }}", abbrlink)).replace("<",
-                                                                                "\\<").replace(
-                    ">", "\\>").replace("!", "\\!")
-
+                context["front_matter"], context["file_content"] = get_post_details(
+                    (Provider().get_content("scaffolds/post.md")))
+                context["front_matter"] = json.dumps(context["front_matter"])
             except Exception as error:
+                print("获取文章模板失败, 错误信息: " + repr(error))
                 context["error"] = repr(error)
             try:
-                if SettingModel.objects.get(
-                        name="IMG_TYPE").content:
+                if json.loads(get_setting("IMG_HOST"))["type"] != "关闭":
                     context["img_bed"] = True
-            except Exception as error:
-                context["error"] = repr(error)
+            except:
+                print("未检测到图床配置, 图床功能关闭")
         elif "posts" in load_template:
             search = request.GET.get("s")
             if search:
@@ -457,50 +545,68 @@ def pages(request):
                                   "description": i.description,
                                   "time": i.time,
                                   "status": i.status})
+            posts.sort(key=lambda x: x["time"])
             context["posts"] = json.dumps(posts)
             context["post_number"] = len(posts)
             context["page_number"] = ceil(context["post_number"] / 15)
             context["search"] = search
         elif 'settings' in load_template:
             try:
-                context['GH_REPO_PATH'] = SettingModel.objects.get(name="GH_REPO_PATH").content
-                context['GH_REPO_BRANCH'] = SettingModel.objects.get(name="GH_REPO_BRANCH").content
-                context['GH_REPO'] = SettingModel.objects.get(name="GH_REPO").content
-                context['GH_TOKEN'] = SettingModel.objects.get(name="GH_TOKEN").content
+                context['GH_REPO_PATH'] = get_setting("GH_REPO_PATH")
+                context['GH_REPO_BRANCH'] = get_setting("GH_REPO_BRANCH")
+                context['GH_REPO'] = get_setting("GH_REPO")
+                context['GH_TOKEN'] = get_setting("GH_TOKEN")
                 token_len = len(context['GH_TOKEN'])
                 if token_len >= 5:
                     context['GH_TOKEN'] = context['GH_TOKEN'][:3] + "*" * (token_len - 5) + \
                                           context['GH_TOKEN'][-1]
-                context['IMG_CUSTOM_URL'] = SettingModel.objects.get(name='IMG_CUSTOM_URL').content
-                context['IMG_CUSTOM_HEADER'] = SettingModel.objects.get(
-                    name='IMG_CUSTOM_HEADER').content
-                context['IMG_CUSTOM_BODY'] = SettingModel.objects.get(
-                    name='IMG_CUSTOM_BODY').content
-                context['IMG_JSON_PATH'] = SettingModel.objects.get(name='IMG_JSON_PATH').content
-                context['IMG_POST'] = SettingModel.objects.get(name='IMG_POST').content
-                context['IMG_API'] = SettingModel.objects.get(name='IMG_API').content
-                if check_if_vercel():
-                    context["showUpdate"] = True
-                context['S3_KEY_ID'] = SettingModel.objects.get(name="S3_KEY_ID").content
-                context['S3_ACCESS_KEY'] = SettingModel.objects.get(name="S3_ACCESS_KEY").content
-                context['S3_ENDPOINT'] = SettingModel.objects.get(name="S3_ENDPOINT").content
-                context['S3_BUCKET'] = SettingModel.objects.get(name="S3_BUCKET").content
-                context['S3_PATH'] = SettingModel.objects.get(name="S3_PATH").content
-                context['S3_PREV_URL'] = SettingModel.objects.get(name="S3_PREV_URL").content
-                context['FTP_HOST'] = SettingModel.objects.get(name="FTP_HOST").content
-                context['FTP_PORT'] = SettingModel.objects.get(name="FTP_PORT").content
-                context['FTP_USER'] = SettingModel.objects.get(name="FTP_USER").content
-                context['FTP_PASS'] = SettingModel.objects.get(name="FTP_PASS").content
-                context['FTP_PATH'] = SettingModel.objects.get(name="FTP_PATH").content
-                context['FTP_PREV_URL'] = SettingModel.objects.get(name="FTP_PREV_URL").content
-                context['IMG_TYPE'] = SettingModel.objects.get(name="IMG_TYPE").content
-                context['ABBRLINK_ALG'] = SettingModel.objects.get(name="ABBRLINK_ALG").content
-                context['ABBRLINK_REP'] = SettingModel.objects.get(name="ABBRLINK_REP").content
-                context["ALLOW_FRIEND"] = SettingModel.objects.get(name="ALLOW_FRIEND").content
-                context["ONEPUSH"] = SettingModel.objects.get(name="ONEPUSH").content
-                context["STATISTIC_DOMAINS"] = SettingModel.objects.get(name="STATISTIC_DOMAINS").content
-                context["STATISTIC_ALLOW"] = SettingModel.objects.get(name="STATISTIC_ALLOW").content
+                context['IMG_TYPE'] = get_setting("IMG_TYPE")
+                context['ABBRLINK_ALG'] = get_setting("ABBRLINK_ALG")
+                context['ABBRLINK_REP'] = get_setting("ABBRLINK_REP")
+                context["ALLOW_FRIEND"] = get_setting("ALLOW_FRIEND")
+                context["STATISTIC_DOMAINS"] = get_setting("STATISTIC_DOMAINS")
+                context["STATISTIC_ALLOW"] = get_setting("STATISTIC_ALLOW")
+                context["FRIEND_RECAPTCHA"] = get_setting("FRIEND_RECAPTCHA")
+                context["RECAPTCHA_TOKEN"] = get_setting("RECAPTCHA_TOKEN")
+                context["LOGIN_RECAPTCHA_SITE_TOKEN"] = get_setting("LOGIN_RECAPTCHA_SITE_TOKEN")
+                context["LOGIN_RECAPTCHA_SERVER_TOKEN"] = get_setting("LOGIN_RECAPTCHA_SERVER_TOKEN")
+                context["EXCERPT_POST"] = get_setting("EXCERPT_POST")
+                context["EXCERPT_LENGTH"] = get_setting("EXCERPT_LENGTH")
+                # Get Provider Settings
+                context["PROVIDER"] = get_setting("PROVIDER")
+                all_provider = all_providers()
+                context["all_providers"] = dict()
+                for provider in all_provider:
+                    params = get_params(provider)
+                    context["all_providers"][provider] = params
+                # Get OnePush Settings
+                context["ONEPUSH"] = get_setting("ONEPUSH")
+                all_pusher = onepush_providers()
+                context["all_pushers"] = dict()
+                for pusher in all_pusher:
+                    params = get_notifier(pusher).params
+                    if "content" in params["optional"]:
+                        params["optional"].remove("content")
+                    if "title" in params["optional"]:
+                        params["optional"].remove("title")
+                    if "content" in params["required"]:
+                        params["required"].remove("content")
+                    if "title" in params["required"]:
+                        params["required"].remove("title")
+                    if "markdown" not in params["optional"]:
+                        params["optional"].append("markdown")
+                    context["all_pushers"][pusher] = params
+                # GET Image Host Settings
+                context["IMG_HOST"] = get_setting("IMG_HOST")
+                all_provider = all_image_providers()
+                context["all_image_hosts"] = dict()
+                for provider in all_provider:
+                    params = get_image_params(provider)
+                    context["all_image_hosts"][provider] = params
+                # CDNs
+                context["ALL_CDN"] = ALL_CDN
             except:
+                print("配置获取错误, 转跳至配置更新页面")
                 return redirect("/update/")
         elif 'advanced' in load_template:
             try:
@@ -512,6 +618,7 @@ def pages(request):
                 context["settings_number"] = len(context["settings"])
                 context["page_number"] = ceil(context["settings_number"] / 15)
             except Exception as e:
+                print("高级设置获取错误: " + repr(e))
                 context["error"] = repr(e)
         elif 'custom' in load_template:
             try:
@@ -527,16 +634,19 @@ def pages(request):
                 context["settings_number"] = len(context["settings"])
                 context["page_number"] = ceil(context["settings_number"] / 15)
             except Exception as e:
+                print("自定义字段获取错误: " + repr(e))
                 context["error"] = repr(e)
         save_setting("LAST_LOGIN", str(int(time())))
         html_template = loader.get_template('home/' + load_template)
         return HttpResponse(html_template.render(context, request))
 
-    except template.TemplateDoesNotExist:
+    except template.TemplateDoesNotExist as e:
+        print("页面不存在: " + repr(e))
         html_template = loader.get_template('home/page-404.html')
         return HttpResponse(html_template.render(context, request))
 
     except Exception as error:
+        print("服务端错误: " + repr(error))
         html_template = loader.get_template('home/page-500.html')
         context["error"] = error
         return HttpResponse(html_template.render(context, request))
