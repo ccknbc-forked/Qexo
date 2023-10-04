@@ -6,7 +6,7 @@ PyGithub==1.58.1
 python-gitlab==3.13.0
 html2text==2020.1.16
 PyYAML==6.0
-urllib3==1.26.15
+urllib3==1.26.17
 Markdown==3.4.1
 djongo==1.3.6
 django-cors-headers==3.14.0
