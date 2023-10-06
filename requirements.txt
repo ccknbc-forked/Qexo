@@ -1,4 +1,4 @@
-Django==3.2.18
+Django==3.2.22
 PyMySQL==1.0.2
 boto3==1.26.94
 requests==2.28.2
