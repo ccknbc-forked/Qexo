@@ -25,7 +25,6 @@ DEBUG = False
 
 try:
     import configs  # 本地部署
-
     ALLOWED_HOSTS = configs.DOMAINS
 except:
     logging.info("获取本地配置文件失败, 使用环境变量获取配置")  # Serverless部署
@@ -42,6 +41,7 @@ INSTALLED_APPS = [
     # 'django.contrib.staticfiles',
     'hexoweb.apps.ConsoleConfig',
     'corsheaders',
+    # "passkeys"
 ]
 
 MIDDLEWARE = [
@@ -84,7 +84,6 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 try:
     import configs
-
     print("获取本地配置文件成功, 使用本地数据库配置")
     DATABASES = configs.DATABASES
 except:
@@ -132,7 +131,7 @@ except:
                 'PORT': os.environ.get("PG_PORT") or os.environ.get("POSTGRES_PORT") or 5432,
             }
         }
-    else:  # 使用MYSQL
+    elif os.environ.get("MYSQL_HOST"):  # 使用MYSQL
         print("使用环境变量中的MySQL数据库")
         for env in ["MYSQL_HOST", "MYSQL_PORT", "MYSQL_PASSWORD"]:
             if env not in os.environ:
@@ -155,8 +154,24 @@ except:
         }
         if os.environ.get("PLANETSCALE"):
             DATABASES["default"]["ENGINE"] = "hexoweb.libs.django_psdb_engine"
+    else:
+        errors = "数据库"
+
+    # Vercel 无法使用 Sqlite
+    # else:  # sqlite
+    #     print("使用sqlite数据库")
+    #     import sqlite3
+    #
+    #     DATABASES = {
+    #         'default': {
+    #             'ENGINE': 'django.db.backends.sqlite3',
+    #             'NAME': 'qexo_data.db',
+    #         }
+    #     }
+
     if errors:
-        raise exceptions.InitError(f"\"{errors}\"环境变量未设置")
+        logging.error(f"{errors}未设置, 请查看: https://www.oplog.cn/qexo/start/build.html")
+        raise exceptions.InitError(f"{errors}未设置, 请查看: https://www.oplog.cn/qexo/start/build.html")
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators

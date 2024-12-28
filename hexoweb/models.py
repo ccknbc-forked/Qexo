@@ -21,6 +21,7 @@ class ImageModel(models.Model):
     size = models.TextField(max_length=0x7FFFFFFF)
     date = models.TextField(max_length=0x7FFFFFFF)
     type = models.TextField(max_length=0x7FFFFFFF)
+    deleteConfig = models.TextField(max_length=0x7FFFFFFF, default="{}")
 
 
 class FriendModel(models.Model):
@@ -64,3 +65,13 @@ class TalkModel(models.Model):
     time = models.TextField(max_length=0x7FFFFFFF)
     like = models.TextField(max_length=0x7FFFFFFF, blank=True, default="[]")
     values = models.TextField(max_length=0x7FFFFFFF, default="{}")
+
+
+class PostModel(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.TextField(max_length=0x7FFFFFFF, blank=False)
+    filename = models.TextField(max_length=0x7FFFFFFF, blank=False)
+    path = models.TextField(max_length=0x7FFFFFFF, blank=False)
+    date = models.FloatField()
+    front_matter = models.TextField(max_length=0x7FFFFFFF, blank=True, default="{}")
+    status = models.BooleanField(default=True)

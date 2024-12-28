@@ -49,16 +49,19 @@ class Local(Provider):
         logging.info("获取路径{}成功".format(path))
         return {"path": path, "data": results}
 
-    def save(self, file, content, commitchange="Update by Qexo"):
+    def save(self, file, content, commitchange="Update by Qexo", autobuild=True):
         path = os.path.join(self.path, file).replace("\\", "/")
         if not os.path.exists("/".join(path.split("/")[0:-1])):
             os.makedirs("/".join(path.split("/")[0:-1]))
         with open(path, "w", encoding="UTF-8") as f:
             f.write(content)
             logging.info("保存文件{}成功".format(file))
-        return self.build()
+        if autobuild:
+            return self.build()
+        else:
+            return autobuild
 
-    def delete(self, path, commitchange="Delete by Qexo"):
+    def delete(self, path, commitchange="Delete by Qexo", autobuild=True):
         path = os.path.join(self.path, path)
         if os.path.isdir(path):
             os.removedirs(path)
@@ -66,11 +69,19 @@ class Local(Provider):
         else:
             os.remove(path)
             logging.info("删除文件{}成功".format(path))
-        return self.build()
+        if autobuild:
+            return self.build()
+        else:
+            return autobuild
 
     def build(self):
         if not self.auto:
             return False
         logging.info("进行自动部署...")
-        p = subprocess.Popen("cd {} && {}".format(self.path, self.auto), shell=True)
+        if os.name == 'nt':
+            exec_cmd = "powershell \"cd {}; {}\"".format(self.path, self.auto)
+        else:
+            exec_cmd = "cd {} && {}".format(self.path, self.auto)
+        logging.info(exec_cmd)
+        p = subprocess.Popen(exec_cmd, shell=True)
         return p

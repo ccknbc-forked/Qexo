@@ -3,4 +3,8 @@
 .idea
 tmp
 venv
-./configs.py
+configs.py
+*.sqlite3
+*.db
+.env
+docker-compose.yaml
